@@ -1,12 +1,15 @@
 use crate::{
-    config::{Config, Selection},
+    config::{selection::SelectedPath, Config, Selection},
     constants::CUSTOM_IGNORE_FILENAME,
     git,
 };
 
-use std::{collections::HashSet, env, fmt::Write, fs, path::PathBuf, process::Command};
+use std::{
+    collections::{HashMap, HashSet},
+    env, fmt::Write, fs, path::PathBuf, process::Command,
+};
 
-use color_eyre::eyre::{Result, WrapErr, eyre};
+use color_eyre::eyre::{eyre, Result, WrapErr};
 
 use clap::Args;
 
@@ -44,69 +47,89 @@ impl Sel {
         previous_selection: Option<Selection>,
         git_root: &PathBuf,
     ) -> Result<Selection> {
-        let Self { roots } = self;
-
-        let selected_paths: HashSet<PathBuf> = previous_selection
+        // 1. Load existing selections from config, making paths absolute. This is our starting point.
+        let mut final_paths: HashMap<PathBuf, bool> = previous_selection
             .unwrap_or_default()
             .into_inner()
             .into_iter()
-            .map(|p| git_root.join(p))
+            .map(|sp| (git_root.join(sp.path), sp.recursive))
             .collect();
-        let mut all_paths = selected_paths.clone();
 
-        if let Some(first_root) = roots.first() {
+        // Keep track of what was in the config to decide which paths are "new" suggestions.
+        let originally_selected_paths: HashSet<PathBuf> = final_paths.keys().cloned().collect();
+
+        // 2. Process explicit CLI roots.
+        let canonical_roots: Vec<PathBuf> = self
+            .roots
+            .iter()
+            .map(|p| p.canonicalize().wrap_err_with(|| format!("Failed to find path {}", p.display())))
+            .collect::<Result<_>>()?;
+
+        for path in &canonical_roots {
+            // A CLI argument implies a recursive selection, but we don't override
+            // an existing non-recursive (`*...`) setting from the config.
+            final_paths.entry(path.clone()).or_insert(true);
+        }
+
+        // 3. Walk directories from CLI roots to discover NEW sub-directories.
+        if let Some(first_root) = canonical_roots.first() {
             let mut walk_builder = WalkBuilder::new(first_root);
 
-            for root in roots.iter().skip(1) {
+            for root in canonical_roots.iter().skip(1) {
                 walk_builder.add(root);
             }
 
             walk_builder.add_custom_ignore_filename(CUSTOM_IGNORE_FILENAME);
 
-            let walk = walk_builder.build();
-
-            for result in walk {
+            for result in walk_builder.build() {
                 let item = result.wrap_err("failed to walk directories")?;
 
                 if let Some(file_type) = item.file_type()
                     && file_type.is_dir()
                 {
-                    let path = item.into_path();
-
-                    let canonical_path = path
-                        //
-                        .canonicalize()
-                        //
-                        .wrap_err_with(|| format!("failed to canonicalize {}", path.display()))?;
-
-                    all_paths.insert(canonical_path);
+                    // For discovered sub-directories, only add them if they are not
+                    // already in our selection map. This preserves any `recursive: false`
+                    // setting on existing selections.
+                    final_paths.entry(item.into_path()).or_insert(true);
                 }
             }
         }
 
-        if all_paths.is_empty() {
+        if final_paths.is_empty() {
             return Ok(Selection::default());
         }
 
-        let mut all_paths_vec: Vec<_> = all_paths.into_iter().collect();
+        // 4. Prepare the buffer for the editor.
+        let mut all_paths_vec: Vec<_> = final_paths
+            .into_iter()
+            .map(|(path, recursive)| SelectedPath::new(path, recursive))
+            .collect();
         all_paths_vec.sort_unstable();
-        all_paths_vec.dedup();
 
         let current_dir = env::current_dir().wrap_err("failed to get current dir")?;
 
-        let mut buf = String::new();
+        const HEADER: &str = "# Lines starting with '#' are ignored.\n\
+                              # To select a path recursively, use its name: path/to/dir\n\
+                              # To select a path non-recursively (only files in the directory), prefix with '*': *path/to/dir\n\n";
 
-        for path in &all_paths_vec {
-            let relative_path = diff_paths(path, &current_dir)
-                //
-                .ok_or_else(|| eyre!("failed to construct relative path for {}", path.display()))?;
+        let mut buf = String::from(HEADER);
 
-            if !selected_paths.contains(path) {
+        for path_item in &all_paths_vec {
+            let relative_path = diff_paths(&path_item.path, &current_dir)
+                .ok_or_else(|| {
+                    eyre!(
+                        "failed to construct relative path for {}",
+                        path_item.path.display()
+                    )
+                })?;
+
+            // Comment out paths that are new suggestions (i.e., not in the original config).
+            if !originally_selected_paths.contains(&path_item.path) {
                 buf.push_str("# ");
             }
 
-            write!(&mut buf, "{}", relative_path.display()).unwrap();
-
+            let path_to_write = SelectedPath::new(relative_path, path_item.recursive);
+            write!(&mut buf, "{}", path_to_write.to_string()).unwrap();
             buf.push('\n');
         }
 
@@ -114,40 +137,39 @@ impl Sel {
 
         fs::write(file.path(), buf).wrap_err("failed to write to temporary file")?;
 
+        let cursor_line = HEADER.lines().count() + 1;
+
         let _ = Command::new("vim")
-            //
+            .arg(format!("+{}", cursor_line))
             .arg(file.path())
-            //
             .spawn()
-            //
             .wrap_err("failed to start editor")?
-            //
             .wait()
-            //
             .wrap_err("failed to wait for editor")?;
 
         let result = fs::read_to_string(file.path())
-            //
             .wrap_err("failed to read temporary file")?;
 
         drop(file);
 
+        // 5. Parse the user's final selection from the editor buffer.
         let mut paths = HashSet::new();
-
         let mut errors = Vec::new();
 
         let result_iter = result
-            //
             .lines()
-            //
-            .filter(|line| !line.starts_with('#'))
-            //
+            .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
             .map(|line| {
                 let trimmed_line = line.trim();
-
-                fs::canonicalize(trimmed_line)
-                    //
-                    .wrap_err_with(|| format!("failed to canonicalize {trimmed_line}"))
+                let selected_path_relative: SelectedPath = trimmed_line.parse().unwrap();
+                fs::canonicalize(&selected_path_relative.path)
+                    .map(|canonical| SelectedPath::new(canonical, selected_path_relative.recursive))
+                    .wrap_err_with(|| {
+                        format!(
+                            "failed to canonicalize {}",
+                            selected_path_relative.path.display()
+                        )
+                    })
             });
 
         for result in result_iter {
@@ -155,7 +177,6 @@ impl Sel {
                 Ok(path) => {
                     paths.insert(path);
                 }
-
                 Err(e) => {
                     errors.push(e);
                 }
@@ -166,9 +187,11 @@ impl Sel {
             let relative_paths = paths
                 .into_iter()
                 .map(|p| {
-                    diff_paths(&p, git_root).ok_or_else(|| {
-                        eyre!("failed to construct relative path for {}", p.display())
-                    })
+                    diff_paths(&p.path, git_root)
+                        .ok_or_else(|| {
+                            eyre!("failed to construct relative path for {}", p.path.display())
+                        })
+                        .map(|relative| SelectedPath::new(relative, p.recursive))
                 })
                 .collect::<Result<HashSet<_>>>()
                 .wrap_err("failed to convert absolute paths to relative paths")?;
@@ -180,15 +203,9 @@ impl Sel {
             let error = if errors.len() == 1 {
                 errors.pop().unwrap()
             } else {
-                errors.pop().unwrap()
-                // # doesn't work
-                //  errors
-                //      //
-                //      .into_iter()
-                //      //
-                //      .fold(eyre!("encountered multiple errors"), |report, e| {
-                //          report.error(e)
-                //      })
+                errors
+                    .into_iter()
+                    .fold(eyre!("encountered multiple errors"), |acc, e| acc.wrap_err(e))
             };
 
             Err(error)
