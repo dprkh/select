@@ -35,8 +35,8 @@ impl fmt::Display for TokenCount {
 /// A simple estimation for token count.
 ///
 /// A common rule of thumb for token estimation is that 1 token is
-/// approximately 4 characters for English text.
-const CHARS_PER_TOKEN: usize = 4;
+/// approximately 5 characters for English text.
+const CHARS_PER_TOKEN: usize = 5;
 
 /// Estimates the number of tokens in a given text.
 ///
