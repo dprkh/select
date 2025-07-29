@@ -126,11 +126,17 @@ impl Sel {
         }
 
         // 4. Prepare the buffer for the editor.
-        let mut all_paths_vec: Vec<_> = final_paths
+        let all_paths_vec: Vec<_> = final_paths
             .into_iter()
             .map(|(path, recursive)| SelectedPath::new(path, recursive))
             .collect();
-        all_paths_vec.sort_unstable();
+
+        let (mut selected_paths, mut new_suggested_paths): (Vec<_>, Vec<_>) = all_paths_vec
+            .into_iter()
+            .partition(|p| originally_selected_paths.contains(&p.path));
+
+        selected_paths.sort_unstable();
+        new_suggested_paths.sort_unstable();
 
         let current_dir = env::current_dir().wrap_err("failed to get current dir")?;
 
@@ -140,22 +146,27 @@ impl Sel {
 
         let mut buf = String::from(HEADER);
 
-        for path_item in &all_paths_vec {
+        let to_relative_string = |path_item: &SelectedPath| -> Result<String> {
             let relative_path = diff_paths(&path_item.path, &current_dir).ok_or_else(|| {
                 eyre!(
                     "failed to construct relative path for {}",
                     path_item.path.display()
                 )
             })?;
-
-            // Comment out paths that are new suggestions (i.e., not in the original config).
-            if !originally_selected_paths.contains(&path_item.path) {
-                buf.push_str("# ");
-            }
-
             let path_to_write = SelectedPath::new(relative_path, path_item.recursive);
-            write!(&mut buf, "{}", path_to_write.to_string()).unwrap();
+            Ok(path_to_write.to_string())
+        };
+
+        for path_item in &selected_paths {
+            writeln!(&mut buf, "{}", to_relative_string(path_item)?).unwrap();
+        }
+
+        if !selected_paths.is_empty() && !new_suggested_paths.is_empty() {
             buf.push('\n');
+        }
+
+        for path_item in &new_suggested_paths {
+            writeln!(&mut buf, "# {}", to_relative_string(path_item)?).unwrap();
         }
 
         let cursor_line = HEADER.lines().count() + 1;
