@@ -13,7 +13,7 @@ pub struct Cli {
 pub enum Command {
     /// Select files.
     #[command(visible_alias = "s")]
-    Select(Select),
+    Sel(Sel),
 
     /// Print selected files.
     #[command(visible_alias = "p")]

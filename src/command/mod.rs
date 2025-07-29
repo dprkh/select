@@ -1,7 +1,7 @@
-pub mod select;
+pub mod sel;
 
 pub mod print;
 
-pub use select::Select;
+pub use sel::Sel;
 
 pub use print::Print;

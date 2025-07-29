@@ -10,7 +10,7 @@ pub fn main() -> Result<()> {
     color_eyre::install()?;
 
     match command {
-        Command::Select(command) => command.run()?,
+        Command::Sel(command) => command.run()?,
 
         Command::Print(command) => command.run()?,
     }

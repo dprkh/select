@@ -16,11 +16,11 @@ use pathdiff::diff_paths;
 use tempfile::NamedTempFile;
 
 #[derive(Args)]
-pub struct Select {
+pub struct Sel {
     roots: Vec<PathBuf>,
 }
 
-impl Select {
+impl Sel {
     pub fn run(self) -> Result<()> {
         let mut config = Config::read()?;
 

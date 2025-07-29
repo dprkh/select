@@ -8,14 +8,18 @@ use std::{
 
 use clap::Args;
 
-use color_eyre::eyre::{Result, WrapErr, eyre};
+use color_eyre::eyre::{eyre, Result, WrapErr};
 
 use ignore::WalkBuilder;
 
 use pathdiff::diff_paths;
 
 #[derive(Args)]
-pub struct Print;
+pub struct Print {
+    /// Print only the file paths
+    #[arg(long)]
+    dry_run: bool,
+}
 
 impl Print {
     pub fn run(self) -> Result<()> {
@@ -63,26 +67,32 @@ impl Print {
                         )
                     })?;
 
-                let mut file = File::open(item.path())
-                    //
-                    .wrap_err_with(|| {
+                if self.dry_run {
+                    writeln!(&mut stdout, "{}", relative_path.display())
                         //
-                        format!("failed to open file {}", item.path().display())
-                    })?;
+                        .wrap_err("failed to write to stdout")?;
+                } else {
+                    let mut file = File::open(item.path())
+                        //
+                        .wrap_err_with(|| {
+                            //
+                            format!("failed to open file {}", item.path().display())
+                        })?;
 
-                let error_message = "failed to write to stdout";
+                    let error_message = "failed to write to stdout";
 
-                write!(&mut stdout, "<file path=\"{}\">\n", relative_path.display())
-                    //
-                    .wrap_err(error_message)?;
+                    write!(&mut stdout, "<file path=\"{}\">\n", relative_path.display())
+                        //
+                        .wrap_err(error_message)?;
 
-                io::copy(&mut file, &mut stdout)
-                    //
-                    .wrap_err(error_message)?;
+                    io::copy(&mut file, &mut stdout)
+                        //
+                        .wrap_err(error_message)?;
 
-                write!(&mut stdout, "</file>\n")
-                    //
-                    .wrap_err(error_message)?;
+                    write!(&mut stdout, "</file>\n")
+                        //
+                        .wrap_err(error_message)?;
+                }
             }
         }
 
