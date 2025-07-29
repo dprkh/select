@@ -25,7 +25,7 @@ use crate::git;
 use std::{fs, path::PathBuf};
 
 use color_eyre::eyre::{Result, WrapErr, eyre};
-use minijinja::{Environment, context};
+use minijinja::Environment;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -101,7 +101,7 @@ pub fn list() -> Result<Vec<TemplateName>> {
     Ok(names)
 }
 
-pub fn render(name: &TemplateName, args: &[String]) -> Result<String> {
+pub fn render<C: Serialize>(name: &TemplateName, ctx: C) -> Result<String> {
     let content = read(name)?;
 
     let mut env = Environment::new();
@@ -112,8 +112,7 @@ pub fn render(name: &TemplateName, args: &[String]) -> Result<String> {
         .get_template(name.as_str())
         .expect("template was just added");
 
-    tpl.render(context! { args => args })
-        .wrap_err("Failed to render template")
+    tpl.render(ctx).wrap_err("Failed to render template")
 }
 
 pub fn file_path(name: &TemplateName) -> Result<PathBuf> {

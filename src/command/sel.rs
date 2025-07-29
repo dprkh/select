@@ -34,15 +34,13 @@ use std::{
     path::PathBuf,
 };
 
-use color_eyre::eyre::{Result, WrapErr, eyre};
+use color_eyre::eyre::{eyre, Result, WrapErr};
 
 use clap::Args;
 
 use ignore::WalkBuilder;
 
 use pathdiff::diff_paths;
-
-use tempfile::NamedTempFile;
 
 #[derive(Args)]
 pub struct Sel {
@@ -160,17 +158,8 @@ impl Sel {
             buf.push('\n');
         }
 
-        let file = NamedTempFile::new().wrap_err("failed to create a temporary file")?;
-
-        fs::write(file.path(), buf).wrap_err("failed to write to temporary file")?;
-
         let cursor_line = HEADER.lines().count() + 1;
-
-        editor::open_in_vim(file.path(), cursor_line)?;
-
-        let result = fs::read_to_string(file.path()).wrap_err("failed to read temporary file")?;
-
-        drop(file);
+        let result = editor::get_user_input_from_file_content(&buf, cursor_line)?;
 
         // 5. Parse the user's final selection from the editor buffer.
         let mut paths = HashSet::new();

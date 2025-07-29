@@ -84,7 +84,8 @@ impl Create {
         }
 
         let path = template::file_path(&name)?;
-        let placeholder = "{# Template for 'sel print'. Use {{ args[0] }}, {{ args[1] }}, etc. for arguments. #}\n";
+        let placeholder =
+            "{# Template for 'sel render'. Use {{ task }} for the task description. #}\n";
         std::fs::write(&path, placeholder)?;
 
         editor::open_in_vim(&path, 2)?;

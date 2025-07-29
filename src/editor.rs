@@ -20,10 +20,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-use std::path::Path;
-use std::process::Command;
+use std::{fs, path::Path, process::Command};
 
 use color_eyre::eyre::{Result, WrapErr};
+use tempfile::NamedTempFile;
 
 pub fn open_in_vim(path: &Path, cursor_line: usize) -> Result<()> {
     let editor = std::env::var("EDITOR").unwrap_or_else(|_| "vim".to_string());
@@ -37,4 +37,14 @@ pub fn open_in_vim(path: &Path, cursor_line: usize) -> Result<()> {
         .wrap_err("failed to wait for editor")?;
 
     Ok(())
+}
+
+pub fn get_user_input_from_file_content(content: &str, cursor_line: usize) -> Result<String> {
+    let file = NamedTempFile::new().wrap_err("failed to create a temporary file")?;
+
+    fs::write(file.path(), content).wrap_err("failed to write to temporary file")?;
+
+    open_in_vim(file.path(), cursor_line)?;
+
+    fs::read_to_string(file.path()).wrap_err("failed to read temporary file")
 }

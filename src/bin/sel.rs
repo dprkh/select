@@ -36,6 +36,8 @@ pub fn main() -> Result<()> {
 
         Command::Print(command) => command.run()?,
 
+        Command::Render(command) => command.run()?,
+
         Command::Template(command) => command.run()?,
     }
 
