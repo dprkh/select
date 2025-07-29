@@ -1,15 +1,18 @@
 use crate::{
-    config::{selection::SelectedPath, Config, Selection},
+    config::{Config, Selection, selection::SelectedPath},
     constants::CUSTOM_IGNORE_FILENAME,
-    git,
+    editor, git,
 };
 
 use std::{
     collections::{HashMap, HashSet},
-    env, fmt::Write, fs, path::PathBuf, process::Command,
+    env,
+    fmt::Write,
+    fs,
+    path::PathBuf,
 };
 
-use color_eyre::eyre::{eyre, Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 
 use clap::Args;
 
@@ -62,7 +65,10 @@ impl Sel {
         let canonical_roots: Vec<PathBuf> = self
             .roots
             .iter()
-            .map(|p| p.canonicalize().wrap_err_with(|| format!("Failed to find path {}", p.display())))
+            .map(|p| {
+                p.canonicalize()
+                    .wrap_err_with(|| format!("Failed to find path {}", p.display()))
+            })
             .collect::<Result<_>>()?;
 
         for path in &canonical_roots {
@@ -84,13 +90,13 @@ impl Sel {
             for result in walk_builder.build() {
                 let item = result.wrap_err("failed to walk directories")?;
 
-                if let Some(file_type) = item.file_type()
-                    && file_type.is_dir()
-                {
-                    // For discovered sub-directories, only add them if they are not
-                    // already in our selection map. This preserves any `recursive: false`
-                    // setting on existing selections.
-                    final_paths.entry(item.into_path()).or_insert(true);
+                if let Some(file_type) = item.file_type() {
+                    if file_type.is_dir() {
+                        // For discovered sub-directories, only add them if they are not
+                        // already in our selection map. This preserves any `recursive: false`
+                        // setting on existing selections.
+                        final_paths.entry(item.into_path()).or_insert(true);
+                    }
                 }
             }
         }
@@ -115,13 +121,12 @@ impl Sel {
         let mut buf = String::from(HEADER);
 
         for path_item in &all_paths_vec {
-            let relative_path = diff_paths(&path_item.path, &current_dir)
-                .ok_or_else(|| {
-                    eyre!(
-                        "failed to construct relative path for {}",
-                        path_item.path.display()
-                    )
-                })?;
+            let relative_path = diff_paths(&path_item.path, &current_dir).ok_or_else(|| {
+                eyre!(
+                    "failed to construct relative path for {}",
+                    path_item.path.display()
+                )
+            })?;
 
             // Comment out paths that are new suggestions (i.e., not in the original config).
             if !originally_selected_paths.contains(&path_item.path) {
@@ -139,16 +144,9 @@ impl Sel {
 
         let cursor_line = HEADER.lines().count() + 1;
 
-        let _ = Command::new("vim")
-            .arg(format!("+{}", cursor_line))
-            .arg(file.path())
-            .spawn()
-            .wrap_err("failed to start editor")?
-            .wait()
-            .wrap_err("failed to wait for editor")?;
+        editor::open_in_vim(file.path(), cursor_line)?;
 
-        let result = fs::read_to_string(file.path())
-            .wrap_err("failed to read temporary file")?;
+        let result = fs::read_to_string(file.path()).wrap_err("failed to read temporary file")?;
 
         drop(file);
 
@@ -205,7 +203,9 @@ impl Sel {
             } else {
                 errors
                     .into_iter()
-                    .fold(eyre!("encountered multiple errors"), |acc, e| acc.wrap_err(e))
+                    .fold(eyre!("encountered multiple errors"), |acc, e| {
+                        acc.wrap_err(e)
+                    })
             };
 
             Err(error)

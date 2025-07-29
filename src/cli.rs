@@ -18,4 +18,8 @@ pub enum Command {
     /// Print selected files.
     #[command(visible_alias = "p")]
     Print(Print),
+
+    /// Manage templates.
+    #[command(visible_alias = "t")]
+    Template(Template),
 }

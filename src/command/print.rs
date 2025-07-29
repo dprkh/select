@@ -1,7 +1,7 @@
 use crate::{
-    config::{selection::SelectedPath, Config},
+    config::{Config, selection::SelectedPath},
     constants::CUSTOM_IGNORE_FILENAME,
-    git,
+    git, template,
 };
 
 use std::{
@@ -12,7 +12,7 @@ use std::{
 
 use clap::Args;
 
-use color_eyre::eyre::{eyre, Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 
 use ignore::WalkBuilder;
 
@@ -23,6 +23,14 @@ pub struct Print {
     /// Print only the file paths
     #[arg(long)]
     dry_run: bool,
+
+    /// Use a template for printing
+    #[arg(long, short, value_name = "TEMPLATE_NAME")]
+    template: Option<String>,
+
+    /// Positional arguments for the template
+    #[arg()]
+    template_args: Vec<String>,
 }
 
 impl Print {
@@ -45,6 +53,21 @@ impl Print {
 
         let mut stdout = io::stdout();
 
+        let rendered_output = if let Some(template_name_str) = &self.template {
+            let template_name = template::TemplateName::new(template_name_str.clone());
+            if self.dry_run {
+                Some(template_name.to_string())
+            } else {
+                Some(template::render(&template_name, &self.template_args)?)
+            }
+        } else {
+            None
+        };
+
+        if let Some(ref output) = rendered_output {
+            writeln!(&mut stdout, "{}", output).wrap_err("failed to write to stdout")?;
+        }
+
         for selected_path in selected_paths {
             let mut walk_builder = WalkBuilder::new(&selected_path.path);
 
@@ -59,49 +82,53 @@ impl Print {
             for result in walk_builder.build() {
                 let item = result.wrap_err("failed to walk directories")?;
 
-                if let Some(file_type) = item.file_type()
-                    && file_type.is_file()
-                {
-                    let relative_path = diff_paths(item.path(), &current_dir)
-                        //
-                        .ok_or_else(|| {
+                if let Some(file_type) = item.file_type() {
+                    if file_type.is_file() {
+                        let relative_path = diff_paths(item.path(), &current_dir)
                             //
-                            eyre!(
+                            .ok_or_else(|| {
                                 //
-                                "failed to construct relative path for {}",
-                                //
-                                item.path().display()
-                            )
-                        })?;
-
-                    if self.dry_run {
-                        writeln!(&mut stdout, "{}", relative_path.display())
-                            //
-                            .wrap_err("failed to write to stdout")?;
-                    } else {
-                        let mut file = File::open(item.path())
-                            //
-                            .wrap_err_with(|| {
-                                //
-                                format!("failed to open file {}", item.path().display())
+                                eyre!(
+                                    //
+                                    "failed to construct relative path for {}",
+                                    //
+                                    item.path().display()
+                                )
                             })?;
 
-                        let error_message = "failed to write to stdout";
+                        if self.dry_run {
+                            writeln!(&mut stdout, "{}", relative_path.display())
+                                //
+                                .wrap_err("failed to write to stdout")?;
+                        } else {
+                            let mut file = File::open(item.path())
+                                //
+                                .wrap_err_with(|| {
+                                    //
+                                    format!("failed to open file {}", item.path().display())
+                                })?;
 
-                        write!(&mut stdout, "<file path=\"{}\">\n", relative_path.display())
-                            //
-                            .wrap_err(error_message)?;
+                            let error_message = "failed to write to stdout";
 
-                        io::copy(&mut file, &mut stdout)
-                            //
-                            .wrap_err(error_message)?;
+                            write!(&mut stdout, "<file path=\"{}\">\n", relative_path.display())
+                                //
+                                .wrap_err(error_message)?;
 
-                        write!(&mut stdout, "</file>\n")
-                            //
-                            .wrap_err(error_message)?;
+                            io::copy(&mut file, &mut stdout)
+                                //
+                                .wrap_err(error_message)?;
+
+                            write!(&mut stdout, "</file>\n")
+                                //
+                                .wrap_err(error_message)?;
+                        }
                     }
                 }
             }
+        }
+
+        if let Some(ref output) = rendered_output {
+            writeln!(&mut stdout, "{}", output).wrap_err("failed to write to stdout")?;
         }
 
         Ok(())

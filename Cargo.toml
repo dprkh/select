@@ -7,9 +7,11 @@ edition = "2024"
 name = "sel"
 
 [dependencies]
+askama = "0.14"
 clap = { version = "4.5", features = ["derive"] }
 color-eyre = "0.6"
 ignore = "0.4"
+minijinja = "2.11"
 pathdiff = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 tempfile = "3.20"
