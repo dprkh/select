@@ -1,4 +1,7 @@
-use crate::config::{Config, Selection};
+use crate::{
+    config::{Config, Selection},
+    constants::CUSTOM_IGNORE_FILENAME,
+};
 
 use std::{collections::HashSet, env, fmt::Write, fs, path::PathBuf, process::Command};
 
@@ -14,7 +17,7 @@ use tempfile::NamedTempFile;
 
 #[derive(Args)]
 pub struct Select {
-    roots: HashSet<PathBuf>,
+    roots: Vec<PathBuf>,
 }
 
 impl Select {
@@ -49,7 +52,7 @@ impl Select {
             walk_builder.add(root);
         }
 
-        walk_builder.add_custom_ignore_filename(".selectignore");
+        walk_builder.add_custom_ignore_filename(CUSTOM_IGNORE_FILENAME);
 
         let walk = walk_builder.build();
 
