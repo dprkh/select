@@ -20,11 +20,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-pub mod cli;
-pub mod command;
-pub mod config;
-pub mod constants;
-pub mod editor;
-pub mod git;
-pub mod output;
-pub mod template;
+use arboard::Clipboard;
+use color_eyre::eyre::{Result, WrapErr};
+use std::io::{self, Write};
+
+pub fn write(content: String, copy: bool) -> Result<()> {
+    if copy {
+        let mut clipboard = Clipboard::new().wrap_err("failed to initialize clipboard")?;
+        clipboard
+            .set_text(content)
+            .wrap_err("failed to copy to clipboard")?;
+        eprintln!("Copied to clipboard.");
+    } else {
+        let mut stdout = io::stdout();
+        write!(&mut stdout, "{}", content).wrap_err("failed to write to stdout")?;
+    }
+    Ok(())
+}

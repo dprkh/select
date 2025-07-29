@@ -28,7 +28,7 @@ use crate::{
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use ignore::WalkBuilder;
 use pathdiff::diff_paths;
-use std::{env, path::Path};
+use std::{env, fmt::Write, fs, path::Path};
 
 /// Walks through all selected files and calls a closure for each file.
 ///
@@ -83,4 +83,33 @@ where
     }
 
     Ok(())
+}
+
+/// Builds a string containing the contents of all selected files,
+/// formatted with `<file>` tags.
+pub fn get_selected_files_content_as_string() -> Result<String> {
+    let mut buf = String::new();
+    walk_selected_files(|abs_path, rel_path| {
+        let content = fs::read_to_string(abs_path)
+            .wrap_err_with(|| format!("failed to read file {}", abs_path.display()))?;
+
+        let error_message = "failed to write to buffer";
+
+        write!(&mut buf, "<file path=\"{}\">\n", rel_path.display()).wrap_err(error_message)?;
+
+        buf.push_str(&content);
+
+        write!(&mut buf, "</file>\n").wrap_err(error_message)?;
+        Ok(())
+    })?;
+    Ok(buf)
+}
+
+/// Builds a string containing the paths of all selected files, one per line.
+pub fn get_selected_files_paths_as_string() -> Result<String> {
+    let mut buf = String::new();
+    walk_selected_files(|_abs_path, rel_path| {
+        writeln!(&mut buf, "{}", rel_path.display()).wrap_err("failed to write to buffer")
+    })?;
+    Ok(buf)
 }

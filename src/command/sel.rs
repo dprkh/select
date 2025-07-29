@@ -34,7 +34,7 @@ use std::{
     path::PathBuf,
 };
 
-use color_eyre::eyre::{eyre, Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 
 use clap::Args;
 

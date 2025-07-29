@@ -20,12 +20,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-use crate::command::utils;
+use crate::{command::utils, output};
 
-use std::{
-    fs::File,
-    io::{self, Write},
-};
+use std::{fmt::Write, fs};
 
 use clap::Args;
 
@@ -36,34 +33,35 @@ pub struct Print {
     /// Print only the file paths
     #[arg(long)]
     dry_run: bool,
+
+    /// Copy the output to the clipboard instead of printing it
+    #[arg(long, short)]
+    copy: bool,
 }
 
 impl Print {
     pub fn run(self) -> Result<()> {
-        let mut stdout = io::stdout();
+        let mut buf = String::new();
 
         if self.dry_run {
             utils::walk_selected_files(|_abs_path, rel_path| {
-                writeln!(&mut stdout, "{}", rel_path.display())
-                    .wrap_err("failed to write to stdout")
+                writeln!(&mut buf, "{}", rel_path.display())
+                    .wrap_err("failed to write path to buffer")
             })?;
         } else {
             utils::walk_selected_files(|abs_path, rel_path| {
-                let mut file = File::open(abs_path)
-                    .wrap_err_with(|| format!("failed to open file {}", abs_path.display()))?;
+                write!(&mut buf, "<file path=\"{}\">\n", rel_path.display())
+                    .wrap_err("failed to write file header to buffer")?;
 
-                let error_message = "failed to write to stdout";
+                let file_content = fs::read_to_string(abs_path)
+                    .wrap_err_with(|| format!("failed to read file {}", abs_path.display()))?;
+                buf.push_str(&file_content);
 
-                write!(&mut stdout, "<file path=\"{}\">\n", rel_path.display())
-                    .wrap_err(error_message)?;
-
-                io::copy(&mut file, &mut stdout).wrap_err(error_message)?;
-
-                write!(&mut stdout, "</file>\n").wrap_err(error_message)?;
+                write!(&mut buf, "</file>\n").wrap_err("failed to write file footer to buffer")?;
                 Ok(())
             })?;
         }
 
-        Ok(())
+        output::write(buf, self.copy)
     }
 }

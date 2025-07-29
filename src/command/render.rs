@@ -22,14 +22,11 @@
 
 use crate::{
     command::utils,
-    editor,
+    editor, output,
     template::{self, TemplateName},
 };
 
-use std::{
-    fs::File,
-    io::{self, Write},
-};
+use std::{fmt::Write, fs};
 
 use clap::Args;
 use color_eyre::eyre::{Result, WrapErr, eyre};
@@ -39,6 +36,10 @@ use serde::Serialize;
 pub struct Render {
     /// Name of the template to use
     template: String,
+
+    /// Copy the output to the clipboard instead of printing it
+    #[arg(long, short)]
+    copy: bool,
 }
 
 #[derive(Serialize)]
@@ -57,33 +58,30 @@ impl Render {
 
         let context = RenderContext { task };
 
-        let output = template::render(&template_name, &context)?;
+        let rendered_template = template::render(&template_name, &context)?;
 
-        let mut stdout = io::stdout();
+        let mut buf = String::new();
 
         // 1. Print rendered template
-        writeln!(&mut stdout, "{}", output).wrap_err("failed to write to stdout")?;
+        writeln!(&mut buf, "{}", rendered_template).wrap_err("failed to write to buffer")?;
 
         // 2. Print selected files
         utils::walk_selected_files(|abs_path, rel_path| {
-            let mut file = File::open(abs_path)
-                .wrap_err_with(|| format!("failed to open file {}", abs_path.display()))?;
+            write!(&mut buf, "<file path=\"{}\">\n", rel_path.display())
+                .wrap_err("failed to write file header to buffer")?;
 
-            let error_message = "failed to write to stdout";
+            let file_content = fs::read_to_string(abs_path)
+                .wrap_err_with(|| format!("failed to read file {}", abs_path.display()))?;
+            buf.push_str(&file_content);
 
-            write!(&mut stdout, "<file path=\"{}\">\n", rel_path.display())
-                .wrap_err(error_message)?;
-
-            io::copy(&mut file, &mut stdout).wrap_err(error_message)?;
-
-            write!(&mut stdout, "</file>\n").wrap_err(error_message)?;
+            write!(&mut buf, "</file>\n").wrap_err("failed to write file footer to buffer")?;
             Ok(())
         })?;
 
         // 3. Print rendered template again
-        write!(&mut stdout, "{}", output).wrap_err("failed to write to stdout")?;
+        write!(&mut buf, "{}", rendered_template).wrap_err("failed to write to buffer")?;
 
-        Ok(())
+        output::write(buf, self.copy)
     }
 }
 
