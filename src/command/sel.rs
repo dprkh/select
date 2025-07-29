@@ -21,9 +21,10 @@
 // THE SOFTWARE.
 
 use crate::{
+    command::utils,
     config::{Config, Selection, selection::SelectedPath},
     constants::CUSTOM_IGNORE_FILENAME,
-    editor, git,
+    editor, git, token,
 };
 
 use std::{
@@ -60,7 +61,13 @@ impl Sel {
 
         config.write()?;
 
-        println!("{selection_len} paths selected");
+        if selection_len > 0 {
+            let files_content = utils::get_selected_files_content_as_string()?;
+            let token_count = token::estimate(&files_content);
+            println!("{selection_len} paths selected. Approximate token count: {token_count}");
+        } else {
+            println!("0 paths selected");
+        }
 
         Ok(())
     }

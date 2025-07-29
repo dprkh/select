@@ -24,6 +24,7 @@ use crate::{
     command::utils,
     editor, output,
     template::{self, TemplateName},
+    token,
 };
 
 use std::{fmt::Write, fs};
@@ -81,7 +82,13 @@ impl Render {
         // 3. Print rendered template again
         write!(&mut buf, "{}", rendered_template).wrap_err("failed to write to buffer")?;
 
-        output::write(buf, self.copy)
+        let token_count = token::estimate(&buf);
+
+        output::write(buf, self.copy)?;
+
+        eprintln!("Approximate token count: {token_count}");
+
+        Ok(())
     }
 }
 

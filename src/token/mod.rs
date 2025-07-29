@@ -20,12 +20,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-pub mod cli;
-pub mod command;
-pub mod config;
-pub mod constants;
-pub mod editor;
-pub mod git;
-pub mod output;
-pub mod template;
-pub mod token;
+use std::fmt;
+
+/// A newtype for representing an estimated token count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default)]
+pub struct TokenCount(pub usize);
+
+impl fmt::Display for TokenCount {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+/// A simple estimation for token count.
+///
+/// A common rule of thumb for token estimation is that 1 token is
+/// approximately 4 characters for English text.
+const CHARS_PER_TOKEN: usize = 4;
+
+/// Estimates the number of tokens in a given text.
+///
+/// This is a rough approximation. For a more accurate count, a proper
+/// tokenizer for the target LLM should be used.
+pub fn estimate(text: &str) -> TokenCount {
+    if text.is_empty() {
+        TokenCount(0)
+    } else {
+        // Round up to the nearest whole token.
+        let count = (text.chars().count() + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN;
+        TokenCount(count)
+    }
+}

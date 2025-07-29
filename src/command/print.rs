@@ -20,7 +20,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-use crate::{command::utils, output};
+use crate::{command::utils, output, token};
 
 use std::{fmt::Write, fs};
 
@@ -42,6 +42,7 @@ pub struct Print {
 impl Print {
     pub fn run(self) -> Result<()> {
         let mut buf = String::new();
+        let mut token_count = None;
 
         if self.dry_run {
             utils::walk_selected_files(|_abs_path, rel_path| {
@@ -60,8 +61,15 @@ impl Print {
                 write!(&mut buf, "</file>\n").wrap_err("failed to write file footer to buffer")?;
                 Ok(())
             })?;
+            token_count = Some(token::estimate(&buf));
         }
 
-        output::write(buf, self.copy)
+        output::write(buf, self.copy)?;
+
+        if let Some(count) = token_count {
+            eprintln!("Approximate token count: {count}");
+        }
+
+        Ok(())
     }
 }
