@@ -5,7 +5,7 @@ use crate::{
 
 use std::{collections::HashSet, env, fmt::Write, fs, path::PathBuf, process::Command};
 
-use color_eyre::eyre::{Result, WrapErr, eyre};
+use color_eyre::eyre::{eyre, Result, WrapErr};
 
 use clap::Args;
 
@@ -24,7 +24,7 @@ impl Select {
     pub fn run(self) -> Result<()> {
         let mut config = Config::read()?;
 
-        let selection = self.select()?;
+        let selection = self.select(config.selection.take())?;
 
         let selection_len = selection.0.len();
 
@@ -37,63 +37,62 @@ impl Select {
         Ok(())
     }
 
-    fn select(&self) -> Result<Selection> {
+    fn select(&self, previous_selection: Option<Selection>) -> Result<Selection> {
         let Self { roots } = self;
 
-        let mut roots_iter = roots.iter();
+        let selected_paths = previous_selection.unwrap_or_default().0;
+        let mut all_paths = selected_paths.clone();
 
-        let Some(first_root) = roots_iter.next() else {
-            return Ok(Selection::default());
-        };
+        if let Some(first_root) = roots.first() {
+            let mut walk_builder = WalkBuilder::new(first_root);
 
-        let mut walk_builder = WalkBuilder::new(first_root);
+            for root in roots.iter().skip(1) {
+                walk_builder.add(root);
+            }
 
-        for root in roots_iter {
-            walk_builder.add(root);
-        }
+            walk_builder.add_custom_ignore_filename(CUSTOM_IGNORE_FILENAME);
 
-        walk_builder.add_custom_ignore_filename(CUSTOM_IGNORE_FILENAME);
+            let walk = walk_builder.build();
 
-        let walk = walk_builder.build();
+            for result in walk {
+                let item = result.wrap_err("failed to walk directories")?;
 
-        let mut dirs = Vec::new();
+                if let Some(file_type) = item.file_type()
+                    && file_type.is_dir()
+                {
+                    let path = item.into_path();
 
-        for result in walk {
-            let item = result.wrap_err("failed to walk directories")?;
+                    let canonical_path = path
+                        //
+                        .canonicalize()
+                        //
+                        .wrap_err_with(|| format!("failed to canonicalize {}", path.display()))?;
 
-            if let Some(file_type) = item.file_type()
-                && file_type.is_dir()
-            {
-                let path = item.into_path();
-
-                let canonical_path = path
-                    //
-                    .canonicalize()
-                    //
-                    .wrap_err_with(|| format!("failed to canonicalize {}", path.display()))?;
-
-                dirs.push(canonical_path);
+                    all_paths.insert(canonical_path);
+                }
             }
         }
 
-        if dirs.is_empty() {
+        if all_paths.is_empty() {
             return Ok(Selection::default());
         }
 
-        dirs.sort_unstable();
-
-        dirs.dedup();
+        let mut all_paths_vec: Vec<_> = all_paths.into_iter().collect();
+        all_paths_vec.sort_unstable();
+        all_paths_vec.dedup();
 
         let current_dir = env::current_dir().wrap_err("failed to get current dir")?;
 
         let mut buf = String::new();
 
-        for dir in dirs {
-            let relative_path = diff_paths(&dir, &current_dir)
+        for path in &all_paths_vec {
+            let relative_path = diff_paths(path, &current_dir)
                 //
-                .ok_or_else(|| eyre!("failed to construct relative path for {}", dir.display()))?;
+                .ok_or_else(|| eyre!("failed to construct relative path for {}", path.display()))?;
 
-            buf.push_str("# ");
+            if !selected_paths.contains(path) {
+                buf.push_str("# ");
+            }
 
             write!(&mut buf, "{}", relative_path.display()).unwrap();
 
