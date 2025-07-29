@@ -1,6 +1,7 @@
 use crate::{
     config::{Config, Selection},
     constants::CUSTOM_IGNORE_FILENAME,
+    git,
 };
 
 use std::{collections::HashSet, env, fmt::Write, fs, path::PathBuf, process::Command};
@@ -23,8 +24,9 @@ pub struct Sel {
 impl Sel {
     pub fn run(self) -> Result<()> {
         let mut config = Config::read()?;
+        let git_root = git::repo_root()?;
 
-        let selection = self.select(config.selection.take())?;
+        let selection = self.select(config.selection.take(), &git_root)?;
 
         let selection_len = selection.0.len();
 
@@ -37,10 +39,19 @@ impl Sel {
         Ok(())
     }
 
-    fn select(&self, previous_selection: Option<Selection>) -> Result<Selection> {
+    fn select(
+        &self,
+        previous_selection: Option<Selection>,
+        git_root: &PathBuf,
+    ) -> Result<Selection> {
         let Self { roots } = self;
 
-        let selected_paths = previous_selection.unwrap_or_default().0;
+        let selected_paths: HashSet<PathBuf> = previous_selection
+            .unwrap_or_default()
+            .into_inner()
+            .into_iter()
+            .map(|p| git_root.join(p))
+            .collect();
         let mut all_paths = selected_paths.clone();
 
         if let Some(first_root) = roots.first() {
@@ -86,7 +97,7 @@ impl Sel {
         let mut buf = String::new();
 
         for path in &all_paths_vec {
-            let relative_path = diff_paths(path, &current_dir)
+            let relative_path = diff_paths(path, ¤t_dir)
                 //
                 .ok_or_else(|| eyre!("failed to construct relative path for {}", path.display()))?;
 
@@ -152,7 +163,16 @@ impl Sel {
         }
 
         if errors.is_empty() {
-            let selection = Selection(paths);
+            let relative_paths = paths
+                .into_iter()
+                .map(|p| {
+                    diff_paths(&p, git_root)
+                        .ok_or_else(|| eyre!("failed to construct relative path for {}", p.display()))
+                })
+                .collect::<Result<HashSet<_>>>()
+                .wrap_err("failed to convert absolute paths to relative paths")?;
+
+            let selection = Selection(relative_paths);
 
             Ok(selection)
         } else {

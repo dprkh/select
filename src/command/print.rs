@@ -1,9 +1,10 @@
-use crate::{config::Config, constants::CUSTOM_IGNORE_FILENAME};
+use crate::{config::Config, constants::CUSTOM_IGNORE_FILENAME, git};
 
 use std::{
     env,
     fs::File,
     io::{self, Write},
+    path::PathBuf,
 };
 
 use clap::Args;
@@ -29,7 +30,15 @@ impl Print {
             return Ok(());
         };
 
-        let mut path_iter = selection.into_inner().into_iter();
+        let git_root = git::repo_root()?;
+
+        let absolute_paths: Vec<PathBuf> = selection
+            .into_inner()
+            .into_iter()
+            .map(|p| git_root.join(p))
+            .collect();
+
+        let mut path_iter = absolute_paths.into_iter();
 
         let Some(first_path) = path_iter.next() else {
             return Ok(());
@@ -55,7 +64,7 @@ impl Print {
             if let Some(file_type) = item.file_type()
                 && file_type.is_file()
             {
-                let relative_path = diff_paths(item.path(), &current_dir)
+                let relative_path = diff_paths(item.path(), ¤t_dir)
                     //
                     .ok_or_else(|| {
                         //

@@ -1,12 +1,11 @@
 use crate::config::Selection;
+use crate::git;
 
 use std::{fs, io, path::PathBuf};
 
-use color_eyre::eyre::{OptionExt, Report, Result, WrapErr};
+use color_eyre::eyre::{Report, Result, WrapErr};
 
 use serde::{Deserialize, Serialize};
-
-use dirs::config_dir;
 
 #[derive(Default, Deserialize, Serialize)]
 pub struct Config {
@@ -14,11 +13,9 @@ pub struct Config {
 }
 
 fn file_path() -> Result<PathBuf> {
-    let file_path = config_dir()
+    let file_path = git::repo_root()?
         //
-        .ok_or_eyre("failed to get config dir")?
-        //
-        .join("dprkh.select")
+        .join(".select")
         //
         .join("select.toml");
 
