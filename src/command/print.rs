@@ -58,7 +58,7 @@ impl Print {
 
                 let error_message = "failed to write to stdout";
 
-                write!(&mut stdout, "<file name=\"{}\">\n", item.file_name().to_string_lossy())
+                write!(&mut stdout, "<file path=\"{}\">\n", item.path().display())
                     //
                     .wrap_err(error_message)?;
 
