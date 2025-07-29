@@ -22,18 +22,10 @@
 
 pub mod sel;
 
-pub mod print;
-
-pub mod render;
-
 pub mod utils;
 
 pub mod template;
 
 pub use sel::Sel;
-
-pub use print::Print;
-
-pub use render::Render;
 
 pub use template::Template;

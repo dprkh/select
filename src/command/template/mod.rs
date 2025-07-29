@@ -20,10 +20,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+pub mod render;
+
 use crate::{
     editor,
     template::{self, TemplateName},
 };
+use render::Render;
 
 use clap::{Args, Subcommand};
 use color_eyre::eyre::{Result, eyre};
@@ -54,6 +57,9 @@ pub enum Command {
     /// List all templates
     #[command(visible_alias = "l")]
     List(List),
+    /// Render a template with a task
+    #[command(visible_alias = "r")]
+    Render(Render),
 }
 
 impl Command {
@@ -63,6 +69,7 @@ impl Command {
             Command::Edit(cmd) => cmd.run(),
             Command::Delete(cmd) => cmd.run(),
             Command::List(cmd) => cmd.run(),
+            Command::Render(cmd) => cmd.run(),
         }
     }
 }

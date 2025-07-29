@@ -34,10 +34,6 @@ pub fn main() -> Result<()> {
     match command {
         Command::Sel(command) => command.run()?,
 
-        Command::Print(command) => command.run()?,
-
-        Command::Render(command) => command.run()?,
-
         Command::Template(command) => command.run()?,
     }
 

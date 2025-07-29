@@ -37,14 +37,6 @@ pub enum Command {
     #[command(visible_alias = "s")]
     Sel(Sel),
 
-    /// Print selected files.
-    #[command(visible_alias = "p")]
-    Print(Print),
-
-    /// Render a template with a task.
-    #[command(visible_alias = "r")]
-    Render(Render),
-
     /// Manage templates.
     #[command(visible_alias = "t")]
     Template(Template),

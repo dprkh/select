@@ -37,10 +37,6 @@ use serde::Serialize;
 pub struct Render {
     /// Name of the template to use
     template: String,
-
-    /// Copy the output to the clipboard instead of printing it
-    #[arg(long, short)]
-    copy: bool,
 }
 
 #[derive(Serialize)]
@@ -84,7 +80,7 @@ impl Render {
 
         let token_count = token::estimate(&buf);
 
-        output::write(buf, self.copy)?;
+        output::copy_to_clipboard(buf)?;
 
         eprintln!("Approximate token count: {token_count}");
 
