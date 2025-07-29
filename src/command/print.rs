@@ -1,18 +1,18 @@
-use crate::{
-    config::Config,
-    constants::CUSTOM_IGNORE_FILENAME,
-};
+use crate::{config::Config, constants::CUSTOM_IGNORE_FILENAME};
 
 use std::{
+    env,
     fs::File,
     io::{self, Write},
 };
 
 use clap::Args;
 
-use color_eyre::eyre::{Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 
 use ignore::WalkBuilder;
+
+use pathdiff::diff_paths;
 
 #[derive(Args)]
 pub struct Print;
@@ -41,6 +41,8 @@ impl Print {
 
         let walk = walk_builder.build();
 
+        let current_dir = env::current_dir().wrap_err("failed to get current dir")?;
+
         let mut stdout = io::stdout();
 
         for result in walk {
@@ -49,6 +51,18 @@ impl Print {
             if let Some(file_type) = item.file_type()
                 && file_type.is_file()
             {
+                let relative_path = diff_paths(item.path(), &current_dir)
+                    //
+                    .ok_or_else(|| {
+                        //
+                        eyre!(
+                            //
+                            "failed to construct relative path for {}",
+                            //
+                            item.path().display()
+                        )
+                    })?;
+
                 let mut file = File::open(item.path())
                     //
                     .wrap_err_with(|| {
@@ -58,7 +72,7 @@ impl Print {
 
                 let error_message = "failed to write to stdout";
 
-                write!(&mut stdout, "<file path=\"{}\">\n", item.path().display())
+                write!(&mut stdout, "<file path=\"{}\">\n", relative_path.display())
                     //
                     .wrap_err(error_message)?;
 
