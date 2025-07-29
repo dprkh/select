@@ -9,7 +9,7 @@ use std::{
 
 use clap::Args;
 
-use color_eyre::eyre::{eyre, Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 
 use ignore::WalkBuilder;
 
@@ -64,7 +64,7 @@ impl Print {
             if let Some(file_type) = item.file_type()
                 && file_type.is_file()
             {
-                let relative_path = diff_paths(item.path(), ¤t_dir)
+                let relative_path = diff_paths(item.path(), &current_dir)
                     //
                     .ok_or_else(|| {
                         //

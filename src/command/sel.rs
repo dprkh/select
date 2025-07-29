@@ -6,7 +6,7 @@ use crate::{
 
 use std::{collections::HashSet, env, fmt::Write, fs, path::PathBuf, process::Command};
 
-use color_eyre::eyre::{eyre, Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 
 use clap::Args;
 
@@ -97,7 +97,7 @@ impl Sel {
         let mut buf = String::new();
 
         for path in &all_paths_vec {
-            let relative_path = diff_paths(path, ¤t_dir)
+            let relative_path = diff_paths(path, &current_dir)
                 //
                 .ok_or_else(|| eyre!("failed to construct relative path for {}", path.display()))?;
 
@@ -166,8 +166,9 @@ impl Sel {
             let relative_paths = paths
                 .into_iter()
                 .map(|p| {
-                    diff_paths(&p, git_root)
-                        .ok_or_else(|| eyre!("failed to construct relative path for {}", p.display()))
+                    diff_paths(&p, git_root).ok_or_else(|| {
+                        eyre!("failed to construct relative path for {}", p.display())
+                    })
                 })
                 .collect::<Result<HashSet<_>>>()
                 .wrap_err("failed to convert absolute paths to relative paths")?;

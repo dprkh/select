@@ -1,6 +1,6 @@
 use std::{path::PathBuf, process::Command};
 
-use color_eyre::eyre::{eyre, Result, WrapErr};
+use color_eyre::eyre::{Result, WrapErr, eyre};
 
 pub fn repo_root() -> Result<PathBuf> {
     let output = Command::new("git")
