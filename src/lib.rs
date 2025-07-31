@@ -25,6 +25,7 @@ pub mod command;
 pub mod config;
 pub mod constants;
 pub mod editor;
+pub mod feature;
 pub mod git;
 pub mod output;
 pub mod template;

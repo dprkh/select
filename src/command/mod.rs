@@ -26,6 +26,10 @@ pub mod utils;
 
 pub mod template;
 
+pub mod feature;
+
 pub use sel::Sel;
 
 pub use template::Template;
+
+pub use feature::Feature;

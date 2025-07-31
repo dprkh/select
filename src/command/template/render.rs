@@ -1,28 +1,8 @@
-// MIT License
-//
-// Copyright (c) 2025 Dmytro Prokhorov
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 use crate::{
     command::utils,
-    editor, output,
+    editor,
+    feature::{self, FeatureName},
+    output,
     template::{self, TemplateName},
     token,
 };
@@ -30,13 +10,17 @@ use crate::{
 use std::{fmt::Write, fs};
 
 use clap::Args;
-use color_eyre::eyre::{Result, WrapErr, eyre};
+use color_eyre::eyre::{eyre, Result, WrapErr};
 use serde::Serialize;
 
 #[derive(Args)]
 pub struct Render {
     /// Name of the template to use
     template: String,
+
+    /// Use a feature's selection and spec
+    #[arg(short, long)]
+    feature: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -51,6 +35,18 @@ impl Render {
             return Err(eyre!("Template '{}' does not exist.", template_name));
         }
 
+        let (selection, spec) = if let Some(feature_name_str) = self.feature {
+            let feature_name = FeatureName::new(feature_name_str);
+            if !feature::exists(&feature_name)? {
+                return Err(eyre!("Feature '{}' does not exist.", feature_name));
+            }
+            let selection = feature::read_selection(&feature_name)?.unwrap_or_default();
+            let spec = feature::read_spec(&feature_name)?;
+            (selection, spec)
+        } else {
+            (utils::get_global_selection()?, None)
+        };
+
         let task = get_task_from_editor()?;
 
         let context = RenderContext { task };
@@ -59,11 +55,19 @@ impl Render {
 
         let mut buf = String::new();
 
-        // 1. Print rendered template
+        let spec_block = spec.map(|s| {
+            let cleaned_spec = remove_comments_from_string(s);
+            format!("<spec>\n{cleaned_spec}\n</spec>\n")
+        });
+
+        // 1. Print spec and rendered template
+        if let Some(ref s) = spec_block {
+            buf.push_str(s);
+        }
         writeln!(&mut buf, "{}", rendered_template).wrap_err("failed to write to buffer")?;
 
         // 2. Print selected files
-        utils::walk_selected_files(|abs_path, rel_path| {
+        utils::walk_selected_files(&selection, |abs_path, rel_path| {
             write!(&mut buf, "<file path=\"{}\">\n", rel_path.display())
                 .wrap_err("failed to write file header to buffer")?;
 
@@ -75,7 +79,10 @@ impl Render {
             Ok(())
         })?;
 
-        // 3. Print rendered template again
+        // 3. Print spec and rendered template again
+        if let Some(ref s) = spec_block {
+            buf.push_str(s);
+        }
         write!(&mut buf, "{}", rendered_template).wrap_err("failed to write to buffer")?;
 
         let token_count = token::estimate(&buf);
@@ -90,16 +97,34 @@ impl Render {
 
 fn get_task_from_editor() -> Result<String> {
     const HEADER: &str =
-        "# Enter your task description. Lines starting with '#' are ignored.\n\n\n";
-    let cursor_line = HEADER.split('\n').count();
+        "<!-- Enter your task description. Content in markdown comments will be ignored. -->\n\n";
+    let cursor_line = HEADER.lines().count();
 
-    let content = editor::get_user_input_from_file_content(HEADER, cursor_line)?;
+    let content = editor::get_user_input_from_file_content(HEADER, cursor_line, Some(".md"))?;
 
-    let task_content: String = content
+    let cleaned_content = remove_comments_from_string(content);
+
+    let task_content: String = cleaned_content
         .lines()
-        .filter(|line| !line.starts_with('#') && !line.trim().is_empty())
+        .filter(|line| !line.trim().is_empty())
         .collect::<Vec<_>>()
         .join("\n");
 
     Ok(task_content)
+}
+
+fn remove_comments_from_string(mut text: String) -> String {
+    loop {
+        if let Some(start) = text.find("<!--") {
+            if let Some(end) = text[start..].find("-->") {
+                text.replace_range(start..start + end + 3, "");
+            } else {
+                // unclosed comment, remove it to avoid infinite loop
+                text.replace_range(start..start + 4, "");
+            }
+        } else {
+            break;
+        }
+    }
+    text
 }

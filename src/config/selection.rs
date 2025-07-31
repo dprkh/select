@@ -79,7 +79,7 @@ impl<'de> Deserialize<'de> for SelectedPath {
     }
 }
 
-#[derive(Default, Deserialize, Serialize)]
+#[derive(Clone, Default, Deserialize, Serialize)]
 pub struct Selection(pub HashSet<SelectedPath>);
 
 impl Selection {

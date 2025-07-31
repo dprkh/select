@@ -33,11 +33,15 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Select files.
+    /// Select files for the global context.
     #[command(visible_alias = "s")]
     Sel(Sel),
 
     /// Manage templates.
     #[command(visible_alias = "t")]
     Template(Template),
+
+    /// Manage features.
+    #[command(visible_alias = "f")]
+    Feature(Feature),
 }

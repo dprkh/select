@@ -33,8 +33,8 @@ pub fn main() -> Result<()> {
 
     match command {
         Command::Sel(command) => command.run()?,
-
         Command::Template(command) => command.run()?,
+        Command::Feature(command) => command.run()?,
     }
 
     Ok(())

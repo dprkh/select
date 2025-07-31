@@ -32,22 +32,32 @@ impl fmt::Display for TokenCount {
     }
 }
 
-/// A simple estimation for token count.
+/// Estimates the number of tokens in a given text using a hybrid heuristic.
 ///
-/// A common rule of thumb for token estimation is that 1 token is
-/// approximately 5 characters for English text.
-const CHARS_PER_TOKEN: usize = 5;
-
-/// Estimates the number of tokens in a given text.
+/// This is a rough approximation that provides a more balanced estimate for both
+/// prose and code compared to simple character counting. It's based on the following:
+/// - Character-based estimate: Assumes an average of 4 characters per token.
+///   This tends to be a reasonable upper bound for code.
+/// - Word-based estimate: Assumes 1 token is roughly 0.75 words (or 4 tokens per 3 words).
+///   This is often more accurate for natural language text.
 ///
-/// This is a rough approximation. For a more accurate count, a proper
-/// tokenizer for the target LLM should be used.
+/// The function returns the maximum of these two estimates to provide a conservative
+/// (i.e., not underestimated) token count.
+///
+/// For a more accurate count, a proper tokenizer for the target LLM (e.g., `tiktoken`)
+/// should be used.
 pub fn estimate(text: &str) -> TokenCount {
     if text.is_empty() {
-        TokenCount(0)
-    } else {
-        // Round up to the nearest whole token.
-        let count = (text.chars().count() + CHARS_PER_TOKEN - 1) / CHARS_PER_TOKEN;
-        TokenCount(count)
+        return TokenCount(0);
     }
+
+    // Estimate based on characters. The factor of 4 is a common rule of thumb.
+    let char_based_estimate = (text.len() as f64 / 4.0).ceil() as usize;
+
+    // Estimate based on words. The 4/3 factor is another common rule of thumb (100 tokens ~ 75 words).
+    let word_count = text.split_whitespace().count();
+    let word_based_estimate = (word_count as f64 * 4.0 / 3.0).ceil() as usize;
+
+    // Use the maximum of the two heuristics for a conservative estimate.
+    TokenCount(char_based_estimate.max(word_based_estimate))
 }
